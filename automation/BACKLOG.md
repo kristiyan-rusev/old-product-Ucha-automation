@@ -11,6 +11,13 @@ ones, unless a note explains why priority changed.
 - [ ] Registration: teacher user kind
 - [ ] Registration: bulgarian-abroad user kind
 - [ ] Registration: other user kind
+- [ ] Profile settings: edit personal data (name/gender/phone) — /profile/settings/,
+      "Лични данни" section's "Редактирай" trigger
+- [ ] Profile settings: edit school & grade — same page, "Училище и клас" section
+- [ ] Profile settings: change login email — same page, "Имейл за вход в Уча.се" section
+      (check whether this requires re-confirmation via email, same as registration)
+- [ ] Profile settings: change password — same page, "Парола за вход в Уча.се" section
+- [ ] Profile settings: notification preference toggles — same page, "Известия" section
 
 <!--
 Eduboom (it.eduboom.dev, ro.eduboom.dev) intentionally out of scope for now — user asked
