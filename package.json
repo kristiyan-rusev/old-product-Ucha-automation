@@ -1,0 +1,22 @@
+{
+  "name": "old-product-ucha-automation",
+  "version": "1.0.0",
+  "description": "Playwright e2e test suite for Ucha.se",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:dev": "npx playwright test --project=ucha-dev",
+    "test:staging": "npx playwright test --project=ucha-staging",
+    "test:headed": "npx playwright test --headed",
+    "test:debug": "npx playwright test --debug",
+    "test:ui": "npx playwright test --ui",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "@types/node": "^22.0.0",
+    "dotenv": "^17.4.2",
+    "googleapis": "^178.0.0",
+    "tsx": "^4.23.13",
+    "typescript": "^5.0.0"
+  }
+}
