@@ -59,6 +59,14 @@ A failure is not automatically "a broken selector." Classify it before touching 
    observed kicking the registration wizard back to step 1 under load, which throws the
    *identical* "locator never appeared" error a genuinely stale selector would — the only
    way to tell them apart is to look at what page you're actually on.
+   - A specific case of this worth knowing about: an apparent "locator never appeared"
+     failure on a *later* field in a multi-step form can actually be an error banner on the
+     *current* step that the code never checked for (e.g. `citySelect` never appearing
+     because the credentials sub-step's own email field was rejected as invalid and the
+     wizard never advanced) — always check for a visible error banner on the current step,
+     not just whether you're on the expected route. One confirmed real cause: registration
+     email's `maxlength="50"` silently truncates a `uniqueTestEmail()` label over ~14 chars
+     (see that function's doc comment) — a bad-data problem, not a selector/timing one.
 2. **Stale selector** (confirmed: right page/step, the expected element just isn't there
    under the old selector) → safe to fix. Re-derive the correct selector from the live DOM
    the same way every selector in this project was originally found (curl + grep, or a

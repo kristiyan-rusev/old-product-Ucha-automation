@@ -1,6 +1,6 @@
 import { Page, Locator } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { retryClick } from '../utils/retryClick';
+import { clickWhenReady } from '../utils/clickWhenReady';
 
 export class ResetPasswordPage extends BasePage {
   // Request step (/reset-password/) — #password-forgotten
@@ -37,7 +37,7 @@ export class ResetPasswordPage extends BasePage {
    */
   async requestReset(email: string) {
     await this.emailInput.fill(email);
-    await retryClick(this.requestSubmitButton, () =>
+    await clickWhenReady(this.requestSubmitButton, () =>
       this.requestSuccessMessage.waitFor({ state: 'visible', timeout: 5000 })
     );
   }
@@ -45,7 +45,7 @@ export class ResetPasswordPage extends BasePage {
   /** On the /reset-password/new/{token} page: sets the new password and waits for the redirect to /login/. */
   async setNewPassword(newPassword: string) {
     await this.newPasswordInput.fill(newPassword);
-    await retryClick(this.newPasswordSubmitButton, () =>
+    await clickWhenReady(this.newPasswordSubmitButton, () =>
       this.page.waitForURL((url) => url.pathname.startsWith('/login'), { timeout: 5000 })
     );
   }

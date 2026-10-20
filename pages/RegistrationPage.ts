@@ -1,6 +1,6 @@
 import { Page, Locator } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { retryClick } from '../utils/retryClick';
+import { clickWhenReady } from '../utils/clickWhenReady';
 
 export type UserKind = 'student' | 'parent' | 'teacher' | 'bulgarian' | 'other';
 
@@ -30,6 +30,15 @@ export class RegistrationPage extends BasePage {
   readonly gradeSelect: Locator;
   readonly citySelect: Locator;
   readonly schoolSelect: Locator;
+  // Same two radio inputs (#profile-student/#profile-pre-school) are reused across kinds
+  // with different label text and effect: for parent, "Ученик"/"Дете в детска градина"
+  // (switches gradeSelect between grades and preschool groups); for teacher, "Учител в
+  // училище"/"Учител в детска градина" (no visible effect — teacher has no gradeSelect at
+  // all). Absent entirely for student.
+  readonly profileStudentRadio: Locator;
+  readonly profilePreSchoolRadio: Locator;
+  readonly profileStudentLabel: Locator;
+  readonly profilePreSchoolLabel: Locator;
   readonly nextButton: Locator;
   readonly backButton: Locator;
   readonly submitButton: Locator;
@@ -73,6 +82,10 @@ export class RegistrationPage extends BasePage {
     // Disabled until a city is chosen — city selection triggers a real request
     // (GET /membership/registration_schools?town=...) that populates this list.
     this.schoolSelect = page.locator('#school-filter');
+    this.profileStudentRadio = page.locator('#profile-student');
+    this.profilePreSchoolRadio = page.locator('#profile-pre-school');
+    this.profileStudentLabel = page.locator('label[for="profile-student"]');
+    this.profilePreSchoolLabel = page.locator('label[for="profile-pre-school"]');
     this.nextButton = page.locator('#register #next');
     this.backButton = page.locator('#register #back');
     this.submitButton = page.locator('#register #send_data');
@@ -103,14 +116,14 @@ export class RegistrationPage extends BasePage {
    * clicking before that is a silent no-op, so retry until the follow-up request fires.
    */
   async selectUserKind(kind: UserKind) {
-    await retryClick(this.optionFor(kind), () =>
+    await clickWhenReady(this.optionFor(kind), () =>
       this.page.waitForResponse((r) => r.url().includes('/reg/select-registration-type'), { timeout: 5000 })
     );
   }
 
   /** Chooses "Регистрирай се с имейл" and waits for the #register form to be revealed. */
   async chooseEmailRegistration() {
-    await retryClick(this.registerWithEmailButton, () =>
+    await clickWhenReady(this.registerWithEmailButton, () =>
       this.page.waitForResponse((r) => r.url().includes('/reg/select-kind'), { timeout: 5000 })
     );
   }
@@ -124,15 +137,51 @@ export class RegistrationPage extends BasePage {
   async fillAccountDetails(username: string, phone: string) {
     await this.usernameInput.fill(username);
     await this.phoneNumberInput.fill(phone);
-    await retryClick(this.nextButton, () => this.emailInput.waitFor({ state: 'visible', timeout: 5000 }));
+    await clickWhenReady(this.nextButton, () => this.emailInput.waitFor({ state: 'visible', timeout: 5000 }));
   }
 
-  /** Sub-step 2: email + password (entered twice), then advance. */
+  /**
+   * Sub-step 2: email + password (entered twice), then advance.
+   * Waits on citySelect rather than gradeSelect — the teacher kind's final sub-step has
+   * no grade selector at all (teachers aren't assigned a grade/group), so gradeSelect
+   * never appears there, but citySelect is present across student, parent, and teacher.
+   */
   async fillCredentials(email: string, password: string) {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
     await this.password2Input.fill(password);
-    await retryClick(this.nextButton, () => this.gradeSelect.waitFor({ state: 'visible', timeout: 5000 }));
+    await clickWhenReady(this.nextButton, () => this.citySelect.waitFor({ state: 'visible', timeout: 5000 }));
+  }
+
+  /**
+   * "Other" kind only: the credentials sub-step IS the final sub-step — there's no
+   * grade/city/school to collect (gradeSelect/citySelect/schoolSelect don't exist in the
+   * DOM at all for this kind), so nextButton stays permanently hidden and submitButton
+   * ("Регистрирай се") is already visible alongside email/password. Fills the fields
+   * directly rather than going through fillCredentials()'s click-and-wait-for-citySelect,
+   * which would never resolve here.
+   */
+  async fillFinalCredentials(email: string, password: string) {
+    await this.emailInput.fill(email);
+    await this.passwordInput.fill(password);
+    await this.password2Input.fill(password);
+  }
+
+  /**
+   * Parent kind only: switches whether the child is a school student or preschool-age,
+   * which re-renders gradeSelect's options in place (grades 1-12 vs. groups 1-4) — same
+   * click-handler-binds-late race as every other control on this form.
+   */
+  async selectProfileType(type: 'student' | 'pre-school') {
+    const label = type === 'student' ? this.profileStudentLabel : this.profilePreSchoolLabel;
+    const expectedFirstOption = type === 'student' ? 'Избери клас' : 'Избери група';
+    await clickWhenReady(label, () =>
+      this.page.waitForFunction(
+        (expected) => document.querySelector('#grade-filter option')?.textContent === expected,
+        expectedFirstOption,
+        { timeout: 5000 }
+      )
+    );
   }
 
   /**
@@ -148,9 +197,18 @@ export class RegistrationPage extends BasePage {
     await this.schoolSelect.selectOption({ index: 1 });
   }
 
+  /** Teacher kind's final sub-step: city and school only — there is no grade selector. */
+  async selectCityAndSchool(city: string) {
+    await Promise.all([
+      this.page.waitForResponse((r) => r.url().includes('/membership/registration_schools')),
+      this.citySelect.selectOption(city),
+    ]);
+    await this.schoolSelect.selectOption({ index: 1 });
+  }
+
   /** Final submit — same click-handler race as the rest of the form's buttons. */
   async submit() {
-    await retryClick(this.submitButton, () =>
+    await clickWhenReady(this.submitButton, () =>
       this.page.waitForURL(/\/registration\/success\/$/, { timeout: 5000 })
     );
   }
@@ -169,5 +227,60 @@ export class RegistrationPage extends BasePage {
     await this.fillAccountDetails(details.username, details.phone);
     await this.fillCredentials(details.email, details.password);
     await this.selectGradeCityAndSchool(details.grade, details.city);
+  }
+
+  /** Drives the full "parent" registration flow end to end, up to (not including) submit. */
+  async registerParent(details: {
+    username: string;
+    phone: string;
+    email: string;
+    password: string;
+    profileType: 'student' | 'pre-school';
+    grade: string;
+    city: string;
+  }) {
+    await this.selectUserKind('parent');
+    await this.chooseEmailRegistration();
+    await this.fillAccountDetails(details.username, details.phone);
+    await this.fillCredentials(details.email, details.password);
+    if (details.profileType === 'pre-school') {
+      await this.selectProfileType('pre-school');
+    }
+    await this.selectGradeCityAndSchool(details.grade, details.city);
+  }
+
+  /** Drives the full "teacher" registration flow end to end, up to (not including) submit. */
+  async registerTeacher(details: { username: string; phone: string; email: string; password: string; city: string }) {
+    await this.selectUserKind('teacher');
+    await this.chooseEmailRegistration();
+    await this.fillAccountDetails(details.username, details.phone);
+    await this.fillCredentials(details.email, details.password);
+    await this.selectCityAndSchool(details.city);
+  }
+
+  /**
+   * Drives the full "bulgarian abroad" registration flow end to end, up to (not including)
+   * submit. Same shape as teacher (city + school, no grade selector, no profile-type
+   * radio) — only difference is citySelect lists "Country, City" pairs abroad instead of
+   * Bulgarian towns, and it accepts the same value/label string either way.
+   */
+  async registerBulgarianAbroad(details: { username: string; phone: string; email: string; password: string; city: string }) {
+    await this.selectUserKind('bulgarian');
+    await this.chooseEmailRegistration();
+    await this.fillAccountDetails(details.username, details.phone);
+    await this.fillCredentials(details.email, details.password);
+    await this.selectCityAndSchool(details.city);
+  }
+
+  /**
+   * Drives the full "other" registration flow end to end, up to (not including) submit.
+   * Only two sub-steps total (account details, then credentials) — see
+   * fillFinalCredentials's doc comment for why there's no third sub-step here.
+   */
+  async registerOther(details: { username: string; phone: string; email: string; password: string }) {
+    await this.selectUserKind('other');
+    await this.chooseEmailRegistration();
+    await this.fillAccountDetails(details.username, details.phone);
+    await this.fillFinalCredentials(details.email, details.password);
   }
 }

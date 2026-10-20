@@ -1,6 +1,6 @@
 import { Page, Locator } from '@playwright/test';
 import { BasePage } from './BasePage';
-import { retryClick } from '../utils/retryClick';
+import { clickWhenReady } from '../utils/clickWhenReady';
 
 export class LoginPage extends BasePage {
   readonly form: Locator;
@@ -44,7 +44,7 @@ export class LoginPage extends BasePage {
    * clicking before that is a silent no-op, so retry until either outcome is observed.
    */
   async submit() {
-    await retryClick(this.submitButton, () =>
+    await clickWhenReady(this.submitButton, () =>
       Promise.race([
         this.page.waitForURL((url) => !url.pathname.startsWith('/login'), { timeout: 5000 }),
         this.errorMessage.waitFor({ state: 'visible', timeout: 5000 }),

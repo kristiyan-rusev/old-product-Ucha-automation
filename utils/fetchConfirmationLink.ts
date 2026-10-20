@@ -68,6 +68,19 @@ export function fetchPasswordResetLink(
   return fetchMandrillLinkFromEmail(recipientEmail, 'парола', opts);
 }
 
+/**
+ * Fetches "Потвърди смяната на имейла си в Уча.се" — sent to the *new* address after the
+ * SMS step of a login-email change — and returns the real confirmation link. Visiting it
+ * finalizes the change and logs the user out (a full identity change), so log back in with
+ * the new email afterward to verify it took effect.
+ */
+export function fetchEmailChangeConfirmationLink(
+  recipientEmail: string,
+  opts?: { timeoutMs?: number; pollIntervalMs?: number }
+): Promise<string> {
+  return fetchMandrillLinkFromEmail(recipientEmail, 'смяната', opts);
+}
+
 /** Walks the MIME part tree Gmail returns and pulls out the text/plain (or text/html) body. */
 function extractBodyText(message: gmail_v1.Schema$Message): string {
   const parts = message.payload?.parts ?? (message.payload ? [message.payload] : []);

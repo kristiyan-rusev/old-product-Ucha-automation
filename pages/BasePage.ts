@@ -1,5 +1,5 @@
 import { Page, Locator } from '@playwright/test';
-import { retryClick } from '../utils/retryClick';
+import { clickWhenReady } from '../utils/clickWhenReady';
 
 export class BasePage {
   readonly page: Page;
@@ -33,7 +33,7 @@ export class BasePage {
    * actually opens.
    */
   async logout() {
-    await retryClick(this.userNavToggler, () => this.logoutLink.waitFor({ state: 'visible', timeout: 5000 }));
+    await clickWhenReady(this.userNavToggler, () => this.logoutLink.waitFor({ state: 'visible', timeout: 5000 }));
     await this.logoutLink.click();
   }
 }

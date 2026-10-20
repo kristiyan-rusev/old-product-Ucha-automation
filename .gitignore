@@ -4,3 +4,7 @@ playwright-report/
 playwright/.auth/
 .env
 .claude/settings.local.json
+# Real MultiSport codes have actual redeemable value (unlike other test-data in this repo) —
+# kept local-only rather than committed.
+stories/UCHA-20682-multisport/test-data/multisport-codes.txt
+stories/UCHA-20682-multisport/test-data/used-codes.json
