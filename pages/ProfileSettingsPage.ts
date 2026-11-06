@@ -9,6 +9,7 @@ export class ProfileSettingsPage extends BasePage {
   // despite its own bounding box being well within the visible area.
   readonly deactivateSectionLink: Locator;
   readonly deactivateTriggerButton: Locator;
+  readonly deactivationBlockedNotice: Locator;
 
   // Step 1 — SMS verification (#modal-code-verification). The trigger button's click starts
   // the process and shows this modal with a "Изпрати код" button; only clicking that actually
@@ -55,7 +56,7 @@ export class ProfileSettingsPage extends BasePage {
   // (#modal-send-code) -> a THIRD distinct SMS-code modal variant (#modal-confirm-code, not
   // codeVerificationModal) -> then an email to the *new* address whose link must be visited
   // to finalize the change, which also logs the user out (see
-  // utils/fetchConfirmationLink.ts's fetchEmailChangeConfirmationLink).
+  // utils/mandrill.ts, Emails.emailChange).
   readonly loginEmailEditButton: Locator;
   readonly loginEmailSaveButton: Locator;
   readonly newEmailInput: Locator;
@@ -92,6 +93,9 @@ export class ProfileSettingsPage extends BasePage {
 
     this.deactivateSectionLink = page.locator('a[href="#delete"]');
     this.deactivateTriggerButton = page.locator('#delete >> #delete-profile-button');
+    // Shown instead of the button while the account has an active monthly-payment plan:
+    // "Не можеш да деактивираш профила си, докато имаш активен абонамент с плащане на месец!"
+    this.deactivationBlockedNotice = page.locator('#delete .disabled-delete');
 
     this.codeVerificationModal = page.locator('#modal-code-verification');
     this.sendCodeButton = page.locator('#code-verification-send-code-button');
@@ -169,11 +173,16 @@ export class ProfileSettingsPage extends BasePage {
   }
 
   /**
-   * Clicks "Изпрати код" and enters the verification code (111111 is the dev-environment
-   * bypass, accepted regardless of the account's real phone number).
+   * Enters the verification code (111111 is the dev-environment bypass, accepted regardless of
+   * the account's real phone number). The modal comes in two versions: normally "Изпрати код"
+   * has to be clicked first; but once the account's phone has been verified (e.g. after editing
+   * personal data) the code is sent straight away and the code input is already showing.
    */
   async verifyWithCode(code: string) {
-    await clickWhenReady(this.sendCodeButton, () => this.codeInput.waitFor({ state: 'visible', timeout: 5000 }));
+    await this.sendCodeButton.or(this.codeInput).first().waitFor({ state: 'visible', timeout: 10000 });
+    if (!(await this.codeInput.isVisible())) {
+      await clickWhenReady(this.sendCodeButton, () => this.codeInput.waitFor({ state: 'visible', timeout: 5000 }));
+    }
     await this.codeInput.fill(code);
     await clickWhenReady(this.confirmCodeButton, () =>
       this.reasonPollModal.waitFor({ state: 'visible', timeout: 5000 })
@@ -264,7 +273,7 @@ export class ProfileSettingsPage extends BasePage {
    * Enters and confirms the SMS code for the email-change flow — a third distinct modal
    * variant (#modal-confirm-code), separate from both deactivation's and personal data's.
    * This only authorizes the change; the real switch happens when the confirmation link
-   * emailed to the *new* address (fetchEmailChangeConfirmationLink) is visited.
+   * emailed to the *new* address (utils/mandrill.ts, Emails.emailChange) is visited.
    */
   async confirmEmailChangeCode(code: string) {
     await this.emailChangeCodeInput.fill(code);

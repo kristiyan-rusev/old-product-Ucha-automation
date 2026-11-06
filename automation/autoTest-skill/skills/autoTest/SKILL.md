@@ -1,7 +1,7 @@
 ---
 name: autoTest
-description: Use this skill when the user invokes /autoTest or asks to write, scaffold, or expand automated tests for Ucha.se or Eduboom. Handles project setup, writing Playwright + TypeScript tests, and GitHub workflow guidance.
-version: 1.4.0
+description: Use this skill when the user invokes /autoTest or asks to write, scaffold, or expand automated tests for Ucha.se or Eduboom — including when they ask Claude to work through the test backlog on its own (overnight, unattended, "start writing tests on your own"), ask how such a run is going or to stop it, ask what should be added to the backlog, or approve / reject backlog proposals. Handles project setup, writing Playwright + TypeScript tests, unattended night runs, and GitHub workflow guidance.
+version: 1.9.0
 ---
 
 # Automated Test Writing — Ucha.se & Eduboom
@@ -9,6 +9,9 @@ version: 1.4.0
 This skill helps write and maintain Playwright + TypeScript automated tests for the Ucha.se and Eduboom platforms.
 
 ## On every invocation — load documentation first
+
+(Exception: if the user only wants to start, check or stop an unattended run, skip this and
+go straight to "Autonomous mode" below.)
 
 Before doing anything else, always read these three files silently into context:
 - `/mnt/c/Users/kristiyan.rusev/Desktop/Claude/Documentation/UCHAdocumentation.md`
@@ -26,7 +29,7 @@ Do not summarize or mention them to the user. Just have their content available 
 - **Repo:** https://github.com/kristiyan-rusev/old-product-Ucha-automation
 - **Local path:** `C:\Users\kristiyan.rusev\Desktop\Claude\Test Automation\old-product-Ucha-automation` (WSL: `/mnt/c/Users/kristiyan.rusev/Desktop/Claude/Test Automation/old-product-Ucha-automation`)
 - **Environments:** Tests are written for test environment first, then staging, then live
-- **Credentials:** Test accounts are not sensitive — credentials can be hardcoded directly in the config or test files. No need for `.env` or secrets management.
+- **Credentials:** Test accounts are not sensitive — credentials can be hardcoded directly in the config or test files. The one real secret is `MANDRILL_API_KEY` in `.env` (never committed, never printed): it reads the site's outgoing emails, including other people's.
 - **Tests are built from scratch** — do NOT copy or port from the new platform suite. Use it only as inspiration for patterns.
 
 ## Platform knowledge
@@ -217,6 +220,54 @@ Choosing selectors is the most important call when writing a test — follow **C
 - Use `--reporter=blob` for sharded runs, merge with `npx playwright merge-reports`
 - Full details: `references/playwright-docs/ci.md`, `references/playwright-docs/ci-intro.md`
 
+## Emails (Mandrill)
+
+Tests that need an email (account activation, password reset, email change, campaign emails)
+read it from Mandrill — t.ucha.dev sends every email through it — with `utils/mandrill.ts`.
+Always the same pattern: announce the email **before** the action that sends it, then read it.
+
+```ts
+const activation = await expectEmail(email, Emails.activation); // records the time, allowlists the address
+await registrationPage.submit();
+await page.goto(await activation.link()); // waits until Mandrill has it (indexing can take ~40 s)
+```
+
+- Mandrill can take up to ~40 s to index a new email. If the test has a check that naturally
+  belongs to that in-between state, do it before reading the email (e.g. in the student story:
+  the not-yet-activated account can't open /profile/). It's optional — if nothing meaningful
+  belongs there, just wait.
+
+- Only an email sent after `expectEmail()` counts (the newest one), searched by exact
+  recipient **and** subject — never an older email to the same address.
+- `Emails` holds the known kinds (subject word + link path); add new ones there.
+- "Must NOT be sent": `expect(await pending.arrivesWithin(60_000)).toBe(false)` — one look
+  right after the action proves nothing because of the indexing delay.
+- A rejected or bounced email fails the test at once with Mandrill's reason — that's a real
+  problem (emails to test addresses stopped going out), not a flaky test.
+- Never call the Mandrill API directly or search without an exact test address: the key can
+  see other people's emails.
+
+## Test accounts
+
+Dev must not fill up with test accounts. All test addresses are "+" aliases of
+`kautotester@gmail.com` (`test-data/credentials.ts`):
+- **Shared accounts** (`users.student / parent / teacher`) — look-only: logging in, browsing,
+  read-only checks. Never change their state. `scripts/ensure-shared-accounts.ts` recreates them.
+- **Fixed addresses** — `testAddress('<label>')`, the same every run. The site lets a
+  deactivated account's email be registered again, so a test registers, works, and
+  **deactivates the account at the end**; next run reuses the address. Never create a new
+  address per run (`uniqueTestEmail` is only for forms that are never submitted).
+- **Stories over single tests** — when several checks need an account in a particular state,
+  chain them in one test with `test.step(...)` instead of one account per test (see
+  `tests/auth/student-account.spec.ts`: register → activate → log in/out → reset password →
+  edit profile → change email → deactivate). Remove leftovers before and after with
+  `removeAccounts` in `beforeEach` / `afterEach`.
+- **One account per test** (e.g. each purchase needs a clean account): `registerAndLogin(page,
+  testInfo, '<label>')` with `test` imported from `utils/fixtures.ts` — the account is
+  deactivated automatically when the test ends, passed or failed.
+- `test-data/created-accounts.log` lists accounts that currently exist; `scripts/cleanup-accounts.ts`
+  deactivates whatever is left in it.
+
 ## Choosing selectors
 
 Playwright's rule (`best-practices-js.md`, `locators.md`): prefer **user-facing attributes and
@@ -353,18 +404,63 @@ Once Phase 2 is stable, tests can be generated from Jira stories:
 - Generate `.spec.ts` files following the established POM pattern
 - Place files in the correct `tests/eduboom/` or `tests/ucha/` subdirectory
 
-## Autonomous mode
+## Autonomous mode — working through the backlog on its own
 
-When the user wants to leave a session running unattended for an extended stretch
-(writing new tests, self-healing broken selectors, working through the backlog without
-approving each step), this is **not** a `/loop` or `/schedule` job — it's a single
-continuous session following `automation/OPERATING_PROCEDURE.md` in the project repo,
-picking work from `automation/BACKLOG.md`, and logging any auto-applied fixes to
-`automation/HEALING_LOG.md` (escalating anything unsafe to `automation/ATTENTION.md`
-instead of guessing). Read that procedure file in full before starting — it has the
-concrete rules (environment-down detection, how to tell a stale selector apart from the
-site's own flow-state hiccups, when never to auto-fix). Requires the user to have set an
-appropriate permission mode themselves so tool calls don't block on approval.
+**When the user asks you to work on your own** — "work on the backlog on your own", "start
+writing tests on your own tonight", "run overnight until 6", "keep going without me" — don't
+do the work in this conversation (it would stop after each item, block on permission
+prompts and run out of context). Start the **night runner** in the Ucha.se repo
+(`/mnt/c/Users/kristiyan.rusev/Desktop/Claude/Test Automation/old-product-Ucha-automation`).
+It works through `automation/BACKLOG.md` in fresh, permission-locked sessions — one backlog
+item each, with the Planner / Healer / Reviewer agents — commits locally (never pushes) and
+leaves a morning report. Details: `automation/NIGHT_RUN.md`.
+
+1. Turn what they said into options (all optional): a stop time → `--until HH:MM` (default
+   07:00); a number of items → `--max-cycles N`; "best quality" / "use Opus" → `--model opus`;
+   "let me watch" → `--trial` (one item, with a visible browser).
+2. Run `automation/night/night-run.sh --background [options]` from the repo folder.
+   - If it refuses because of uncommitted changes, show the user what's uncommitted and ask
+     whether to commit it (locally) first. Never pass `--force` without asking.
+   - If a run is already going, say so and offer its status or to stop it.
+3. Tell the user in two or three lines: it started, until when, and that they can ask "how's
+   it going?" or "stop the night run". After about a minute run `--status` once and mention
+   the email line from the report — if email isn't available, items that need a fresh account
+   are skipped.
+
+**"How's it going?" / "what did it do last night?"** → `automation/night/night-run.sh --status`.
+Summarise: running or not, each cycle's result, the commits, and anything new in
+`ATTENTION.md` (that needs the user). `git log --grep Night-Run` lists all night commits —
+offer to walk through them.
+
+**"Stop"** → `automation/night/night-run.sh --stop` (finishes the current cycle, then writes
+the summary). Only if the user insists on stopping right away: `pkill -f night-run.sh`.
+
+**The Backlog Scout** (`.claude/agents/ucha-backlog-scout.md`, rules in `AGENT_RULES.md`)
+keeps the backlog stocked. Night runs call it by themselves when they run out of work and at
+the end of the night: low-risk ideas become `- [ ]` items right away, everything else lands
+as `- [?]` under `## Proposed — needs your OK` at the end of `BACKLOG.md`.
+- **"What should we add to the backlog?"** → if the `ucha-backlog-scout` agent is available
+  (conversation started in the repo folder), start it; otherwise run
+  `automation/night/night-run.sh --scout` (about 10 minutes). Then list what it added and
+  proposed.
+- **"Show the proposals"** → list the `- [?]` items numbered, one line each.
+- **"Approve 2 and 5" / "approve the search one"** → move those lines from the Proposed section
+  to the end of the main list as `- [ ]` (keep their Scout note), commit locally.
+- **"Reject 3"** → move it into the "Rejected proposals" comment list at the bottom as one
+  line (date, gist, the user's reason if given) so it's never proposed again; commit locally.
+- In status summaries, always mention how many proposals are waiting.
+
+**If you are a night-run cycle yourself** (your prompt says you're running unattended as a
+cycle of the night run): never start the runner. Follow `automation/OPERATING_PROCEDURE.md`,
+picking work from `automation/BACKLOG.md`, logging any auto-applied fixes to
+`automation/HEALING_LOG.md` and escalating anything unsafe to `automation/ATTENTION.md`
+instead of guessing. Read that procedure in full before starting — it has the concrete rules
+(environment-down detection, how to tell a stale selector apart from the site's own
+flow-state hiccups, when never to auto-fix) — and `automation/AGENT_RULES.md`.
+
+**Working through the backlog together** (the user is present and wants to go item by item
+in this conversation) is the normal interactive flow — same procedure, but you report and
+they steer.
 
 ## GitHub workflow
 

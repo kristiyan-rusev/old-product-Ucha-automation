@@ -33,7 +33,29 @@ export class BasePage {
    * actually opens.
    */
   async logout() {
+    await this.closeOnboardingOverlay();
     await clickWhenReady(this.userNavToggler, () => this.logoutLink.waitFor({ state: 'visible', timeout: 5000 }));
     await this.logoutLink.click();
   }
+
+  /**
+   * New accounts get a full-screen onboarding slider on the home page (#pre-onboarding-container
+   * and #pre-onboarding-process) that covers the header. A user gets past it with "Към уроците"
+   * (#finish-preonboarding), which only appears after the slides' videos — its handler isn't
+   * even attached before that — and only removes the overlay in the browser; it comes back on
+   * the next visit. Tests that just need the page underneath remove it the same way (a
+   * test-only shortcut); the onboarding itself is a backlog item of its own.
+   */
+  async closeOnboardingOverlay() {
+    if (new URL(this.page.url()).pathname !== '/') return; // only the dashboard has it
+    const overlay = this.page.locator('#pre-onboarding-container');
+    await overlay.waitFor({ state: 'visible', timeout: 3000 }).catch(() => {});
+    if (!(await overlay.isVisible())) return;
+    await this.page.evaluate(() => {
+      document.querySelectorAll('#pre-onboarding-container, #pre-onboarding-process').forEach((el) => el.remove());
+      document.body.style.overflow = 'visible';
+    });
+    await overlay.waitFor({ state: 'detached', timeout: 5000 });
+  }
+
 }

@@ -1,107 +1,100 @@
 import 'dotenv/config';
 import { chromium } from '@playwright/test';
-import { LoginPage } from '../pages/LoginPage';
-import { ProfileSettingsPage } from '../pages/ProfileSettingsPage';
+import { deactivateIfExists, TEST_PASSWORDS } from '../utils/accounts';
 import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Bulk-deactivates the throwaway test accounts accumulated in test-data/created-accounts.log
- * (registration/password-reset/registration-confirmation tests each create one real account
- * per run and never clean it up themselves — this is that cleanup, run periodically instead
- * of per-test). Usage: npx tsx scripts/cleanup-accounts.ts
+ * Deactivates leftover test accounts on t.ucha.dev: everything in test-data/created-accounts.log,
+ * plus any addresses passed on the command line.
  *
- * A fresh browser context per account is required — reusing a single page across 30+
- * sequential login/deactivate cycles left it in a broken state (every subsequent field-fill
- * timed out) even though a brand-new browser worked fine immediately after, so whatever
- * accumulated was session-local, not the site actually blocking us.
+ *   npx tsx scripts/cleanup-accounts.ts                        # the log
+ *   npx tsx scripts/cleanup-accounts.ts --only a@x,b@x --password 'Testparola*'
+ *
+ * For each account: log in with the known test passwords → profile settings → deactivate (SMS
+ * code 111111 on dev). An account that can't log in may simply never have been activated — then
+ * its activation email is looked up in Mandrill (up to 30 days back), the account is activated
+ * and deactivated right after. Accounts that still can't be reached (already deactivated, or
+ * their email is gone) are dropped from the log; real failures stay in it for the next run.
+ *
+ * A fresh browser context per account: reusing one page across dozens of login/deactivate
+ * cycles left it in a broken state (every later field-fill timed out).
  */
 
 const BASE_URL = 'https://t.ucha.dev';
 const LOG_PATH = path.join(__dirname, '..', 'test-data', 'created-accounts.log');
-const CANDIDATE_PASSWORDS = ['TestPass123!', 'NewTestPass456!'];
 
-interface LogEntry {
-  raw: string;
-  email: string;
+type Entry = { raw: string; email: string };
+type Outcome = 'deactivated' | 'activated+deactivated' | 'unreachable' | 'blocked-monthly-plan' | 'failed';
+
+function arg(name: string): string | undefined {
+  const i = process.argv.indexOf(name);
+  return i > 0 ? process.argv[i + 1] : undefined;
 }
 
-function readEntries(): LogEntry[] {
+function readLog(): Entry[] {
   if (!fs.existsSync(LOG_PATH)) return [];
-  const content = fs.readFileSync(LOG_PATH, 'utf-8').trim();
-  if (!content) return [];
-  return content.split('\n').map((line) => ({ raw: line, email: line.split('\t')[2] })).filter((e) => e.email);
-}
-
-/** Rewrites the log to keep only entries that had a genuine unexpected failure (worth retrying). */
-function writeRemaining(entries: LogEntry[]) {
-  const content = entries.map((e) => e.raw).join('\n');
-  fs.writeFileSync(LOG_PATH, content ? content + '\n' : '');
+  return fs
+    .readFileSync(LOG_PATH, 'utf-8')
+    .split('\n')
+    .filter(Boolean)
+    .map((raw) => ({ raw, email: raw.split('\t')[2] }))
+    .filter((e) => e.email);
 }
 
 async function main() {
-  const entries = readEntries();
-  const uniqueByEmail = new Map<string, LogEntry>();
-  for (const e of entries) uniqueByEmail.set(e.email, e);
-  const toProcess = [...uniqueByEmail.values()];
-
-  console.log(`${toProcess.length} accounts to process.\n`);
+  const only = arg('--only');
+  const passwords = arg('--password') ? [arg('--password')!, ...TEST_PASSWORDS] : TEST_PASSWORDS;
+  const fromLog = !only;
+  const entries: Entry[] = only ? only.split(',').map((email) => ({ raw: '', email: email.trim() })) : readLog();
+  const unique = [...new Map(entries.map((e) => [e.email.toLowerCase(), e])).values()];
+  console.log(`${unique.length} accounts to process.\n`);
 
   const browser = await chromium.launch({ headless: true });
-  let deactivated = 0;
-  let unreachable = 0;
-  const failedEntries: LogEntry[] = [];
+  const counts: Record<Outcome, number> = { deactivated: 0, 'activated+deactivated': 0, unreachable: 0, 'blocked-monthly-plan': 0, failed: 0 };
+  const failed: Entry[] = [];
 
-  for (const [i, entry] of toProcess.entries()) {
-    console.log(`[${i + 1}/${toProcess.length}] ${entry.email}`);
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    const loginPage = new LoginPage(page);
-    const settingsPage = new ProfileSettingsPage(page);
-
-    try {
-      let workingPassword: string | null = null;
-      for (const password of CANDIDATE_PASSWORDS) {
-        await page.goto(`${BASE_URL}/login/`, { timeout: 15000 });
-        await loginPage.login(entry.email, password);
-        await page.waitForTimeout(1500);
-        if (page.url() === `${BASE_URL}/`) {
-          workingPassword = password;
-          break;
-        }
+  // A few accounts at a time (--parallel N, default 3), each in its own browser context.
+  const parallel = Number(arg('--parallel') ?? 3);
+  let next = 0;
+  let done = 0;
+  const worker = async () => {
+    while (next < unique.length) {
+      const entry = unique[next++];
+      const context = await browser.newContext({ baseURL: BASE_URL });
+      const page = await context.newPage();
+      let outcome: Outcome;
+      try {
+        const result = await deactivateIfExists(page, entry.email, passwords);
+        outcome = result === 'not-found' ? 'unreachable' : result;
+        // The site won't deactivate an account that pays monthly — keep it in the log for an admin.
+        if (outcome === 'blocked-monthly-plan') failed.push(entry);
+      } catch (e) {
+        outcome = 'failed';
+        failed.push(entry);
+        console.log(`  error (${entry.email}): ${(e as Error).message.split('\n')[0]}`);
+      } finally {
+        await context.close();
       }
-
-      if (!workingPassword) {
-        console.log('  unreachable — could not log in with any known password (already deactivated or unconfirmed)');
-        unreachable++;
-        continue;
-      }
-
-      await page.goto(`${BASE_URL}/profile/settings/`, { waitUntil: 'networkidle', timeout: 15000 });
-      await settingsPage.startDeactivation();
-      await settingsPage.verifyWithCode('111111');
-      await settingsPage.submitReason(1);
-      await settingsPage.confirmDeactivation(workingPassword);
-      console.log('  deactivated');
-      deactivated++;
-    } catch (e) {
-      console.log('  FAILED (kept in log for retry):', (e as Error).message.split('\n')[0]);
-      failedEntries.push(entry);
-    } finally {
-      await context.close();
+      counts[outcome!]++;
+      console.log(`[${++done}/${unique.length}] ${outcome!.padEnd(21)} ${entry.email}`);
     }
-  }
-
-  writeRemaining(failedEntries);
-
-  console.log(
-    `\nDone. Deactivated: ${deactivated}, unreachable (removed from log): ${unreachable}, ` +
-      `failed (kept for retry): ${failedEntries.length}, total: ${toProcess.length}`
-  );
+  };
+  await Promise.all(Array.from({ length: parallel }, worker));
   await browser.close();
+
+  // Only real failures stay in the log, for the next run — plus anything tests added to the
+  // log while this was running (re-read now, so those aren't lost).
+  if (fromLog) {
+    const processed = new Set(unique.map((e) => e.email.toLowerCase()));
+    const failedSet = new Set(failed.map((e) => e.email.toLowerCase()));
+    const keep = readLog().filter((e) => !processed.has(e.email.toLowerCase()) || failedSet.has(e.email.toLowerCase()));
+    fs.writeFileSync(LOG_PATH, keep.map((e) => e.raw).join('\n') + (keep.length ? '\n' : ''));
+  }
+  console.log(`\nDone: ${JSON.stringify(counts)}`);
 }
 
 main().catch((e) => {
-  console.error('FATAL ERROR:', e);
+  console.error('FATAL', e);
   process.exit(1);
 });

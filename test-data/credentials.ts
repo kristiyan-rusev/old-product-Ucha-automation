@@ -1,28 +1,35 @@
 /**
- * A fresh, never-before-used email for registration tests — each run needs a unique one.
- *
- * Keep `label` to 14 characters or fewer: the registration form's email input has
- * `maxlength="50"`, and `kristest2233+` (13) + label + a 13-digit timestamp + `@gmail.com`
- * (10) must fit within that. A longer label gets silently truncated mid-domain (e.g. cut
- * to "...@gmail." with "com" missing) — the form then rejects it as an invalid email and
- * registration never advances, which looks exactly like a stale-selector/timing failure on
- * whatever field comes next, not what's actually wrong (found the hard way).
+ * Every test address is a "+" alias of one real Gmail inbox, kautotester@gmail.com. Emails to
+ * it are read from Mandrill (utils/mandrill.ts), so the inbox itself is never opened — it only
+ * has to exist, so emails don't bounce.
  */
-export function uniqueTestEmail(label: string): string {
-  return `kristest2233+${label}${Date.now()}@gmail.com`;
+const INBOX_USER = 'kautotester';
+const INBOX_DOMAIN = 'gmail.com';
+
+/**
+ * A fixed test address: kautotester+<label>@gmail.com. Tests reuse the same addresses on every
+ * run — the account is deactivated at the end of the test and registered again next time (the
+ * site allows re-registering a deactivated account's email), so dev doesn't fill up with
+ * accounts.
+ */
+export function testAddress(label: string): string {
+  return `${INBOX_USER}+${label}@${INBOX_DOMAIN}`;
 }
 
+/**
+ * A never-used address, for forms that are filled in but never submitted (no account is
+ * created). Keep `label` to 15 characters or fewer: the email input has `maxlength="50"`, and
+ * `kautotester+` (12) + label + a 13-digit timestamp + `@gmail.com` (10) must fit. A longer
+ * label gets silently cut mid-domain — the form then rejects the address and the wizard
+ * doesn't advance, which looks like a timing or selector failure on the next field.
+ */
+export function uniqueTestEmail(label: string): string {
+  return `${INBOX_USER}+${label}${Date.now()}@${INBOX_DOMAIN}`;
+}
+
+/** Shared accounts — for looking around and logging in only; never change their state. */
 export const users = {
-  student: {
-    email: "kristest2233+student@gmail.com",
-    password: "Testparola*",
-  },
-  parent: {
-    email: "kristest2233+parent@gmail.com",
-    password: "Testparola*",
-  },
-  teacher: {
-    email: "kristest2233+teacher@gmail.com",
-    password: "Testparola*",
-  },
+  student: { email: testAddress('student'), password: 'Testparola*' },
+  parent: { email: testAddress('parent'), password: 'Testparola*' },
+  teacher: { email: testAddress('teacher'), password: 'Testparola*' },
 };

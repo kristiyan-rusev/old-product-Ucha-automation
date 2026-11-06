@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Read", "Glob", "Grep", "Agent", "Skill", "TodoWrite",
+      "Edit(//{{REPO}}/**)", "Write(//{{REPO}}/**)",
+      "Read(//tmp/**)", "Edit(//tmp/**)", "Write(//tmp/**)",
+      "mcp__playwright-test",
+      "Bash(cd *)", "Bash(ls *)", "Bash(cat *)", "Bash(head *)", "Bash(tail *)", "Bash(grep *)",
+      "Bash(sed -n *)", "Bash(wc *)", "Bash(find *)", "Bash(echo *)", "Bash(date *)", "Bash(sort *)",
+      "Bash(mkdir *)", "Bash(cp *)", "Bash(mv *)", "Bash(rm /tmp/*)", "Bash(rm -f /tmp/*)",
+      "Bash(curl *)", "Bash(node *)", "Bash(python3 *)",
+      "Bash(npx playwright test *)", "Bash(npx tsc *)", "Bash(npx tsx *)",
+      "Bash(git status*)", "Bash(git diff*)", "Bash(git log *)", "Bash(git show *)",
+      "Bash(git add *)", "Bash(git commit *)", "Bash(git restore *)", "Bash(git rm *)",
+      "Bash(git rev-parse *)", "Bash(git ls-files*)"
+    ],
+    "deny": [
+      "WebFetch", "WebSearch", "Bash(*night-run*)",
+      "Bash(git push*)", "Bash(*git.exe*)", "Bash(gh *)",
+      "Bash(git reset *)", "Bash(git rebase *)", "Bash(git filter-branch *)", "Bash(git clean *)",
+      "Bash(git branch *)", "Bash(git checkout *)", "Bash(git switch *)", "Bash(git merge *)",
+      "Bash(git stash *)", "Bash(git config *)", "Bash(git remote *)",
+      "Read(**/.env)", "Edit(**/.env)", "Write(**/.env)", "Bash(*.env*)", "Bash(*MANDRILL*)", "Bash(*mandrillapp*)", "Bash(env*)", "Bash(printenv*)",
+      "Edit(//{{REPO}}/.claude/**)", "Write(//{{REPO}}/.claude/**)",
+      "Edit(//{{REPO}}/automation/night/**)", "Write(//{{REPO}}/automation/night/**)",
+      "Edit(//{{REPO}}/playwright.config.ts)", "Write(//{{REPO}}/playwright.config.ts)",
+      "Edit(//{{REPO}}/automation/AGENT_RULES.md)", "Write(//{{REPO}}/automation/AGENT_RULES.md)",
+      "Edit(//{{REPO}}/automation/OPERATING_PROCEDURE.md)", "Write(//{{REPO}}/automation/OPERATING_PROCEDURE.md)"
+    ]
+  }
+}

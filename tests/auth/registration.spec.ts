@@ -1,7 +1,10 @@
 import { test, expect } from '@playwright/test';
+
+// The registration wizard's steps and fields for each user kind — checked without submitting,
+// so no account is created. Registering for real (and activating, using and deactivating the
+// account) is covered by the stories in student-account.spec.ts and user-kinds.spec.ts.
 import { RegistrationPage } from '../../pages/RegistrationPage';
 import { uniqueTestEmail } from '../../test-data/credentials';
-import { logCreatedAccount } from '../../utils/testAccountLog';
 
 test.describe('Registration', () => {
   let registrationPage: RegistrationPage;
@@ -34,28 +37,6 @@ test.describe('Registration', () => {
     await expect(registrationPage.phoneNumberInput).toBeVisible();
   });
 
-  // Note: this creates a real user account on the dev environment each run, using a
-  // disposable email under the kristest2233+ alias already used for other test accounts.
-  test('completing all steps with valid data creates the account', async ({ page }, testInfo) => {
-    const email = uniqueTestEmail('reg');
-    await registrationPage.registerStudent({
-      username: 'QATestStudent',
-      phone: '888123456',
-      email,
-      password: 'TestPass123!',
-      grade: '7',
-      city: 'София',
-    });
-
-    await registrationPage.submit();
-    // The account is created server-side by the click above, regardless of what the
-    // assertions below find — log it now so it's recorded even if they fail.
-    logCreatedAccount(email, testInfo.project.name);
-
-    await expect(page).toHaveURL(/\/registration\/success\/$/);
-    await expect(registrationPage.successHeading).toBeVisible();
-    await expect(registrationPage.successHeading).toContainText('Трябва да потвърдиш регистрацията си!');
-  });
 });
 
 test.describe('Registration — parent user kind', () => {
@@ -86,27 +67,6 @@ test.describe('Registration — parent user kind', () => {
     await expect(registrationPage.gradeSelect.locator('option')).toHaveCount(5); // placeholder + groups 1-4
   });
 
-  // Note: this creates a real user account on the dev environment each run, same as the
-  // student equivalent above.
-  test('completing all steps with valid data creates a parent account', async ({ page }, testInfo) => {
-    const email = uniqueTestEmail('regparent');
-    await registrationPage.registerParent({
-      username: 'QATestParent',
-      phone: '888123456',
-      email,
-      password: 'TestPass123!',
-      profileType: 'student',
-      grade: '7',
-      city: 'София',
-    });
-
-    await registrationPage.submit();
-    logCreatedAccount(email, testInfo.project.name);
-
-    await expect(page).toHaveURL(/\/registration\/success\/$/);
-    await expect(registrationPage.successHeading).toBeVisible();
-    await expect(registrationPage.successHeading).toContainText('Трябва да потвърдиш регистрацията си!');
-  });
 });
 
 test.describe('Registration — teacher user kind', () => {
@@ -133,25 +93,6 @@ test.describe('Registration — teacher user kind', () => {
     await expect(registrationPage.citySelect).toBeVisible();
   });
 
-  // Note: this creates a real user account on the dev environment each run, same as the
-  // student/parent equivalents above.
-  test('completing all steps with valid data creates a teacher account', async ({ page }, testInfo) => {
-    const email = uniqueTestEmail('regteacher');
-    await registrationPage.registerTeacher({
-      username: 'QATestTeacher',
-      phone: '888123456',
-      email,
-      password: 'TestPass123!',
-      city: 'София',
-    });
-
-    await registrationPage.submit();
-    logCreatedAccount(email, testInfo.project.name);
-
-    await expect(page).toHaveURL(/\/registration\/success\/$/);
-    await expect(registrationPage.successHeading).toBeVisible();
-    await expect(registrationPage.successHeading).toContainText('Трябва да потвърдиш регистрацията си!');
-  });
 });
 
 test.describe('Registration — bulgarian-abroad user kind', () => {
@@ -177,25 +118,6 @@ test.describe('Registration — bulgarian-abroad user kind', () => {
     await expect(registrationPage.citySelect.locator('option').filter({ hasText: 'Германия, Берлин' })).toHaveCount(1);
   });
 
-  // Note: this creates a real user account on the dev environment each run, same as the
-  // other user kinds above.
-  test('completing all steps with valid data creates a bulgarian-abroad account', async ({ page }, testInfo) => {
-    const email = uniqueTestEmail('regbulgarian');
-    await registrationPage.registerBulgarianAbroad({
-      username: 'QATestBulgarian',
-      phone: '888123456',
-      email,
-      password: 'TestPass123!',
-      city: 'Германия, Берлин',
-    });
-
-    await registrationPage.submit();
-    logCreatedAccount(email, testInfo.project.name);
-
-    await expect(page).toHaveURL(/\/registration\/success\/$/);
-    await expect(registrationPage.successHeading).toBeVisible();
-    await expect(registrationPage.successHeading).toContainText('Трябва да потвърдиш регистрацията си!');
-  });
 });
 
 test.describe('Registration — other user kind', () => {
@@ -222,22 +144,4 @@ test.describe('Registration — other user kind', () => {
     await expect(registrationPage.submitButton).toBeVisible();
   });
 
-  // Note: this creates a real user account on the dev environment each run, same as the
-  // other user kinds above.
-  test('completing both steps with valid data creates an "other" account', async ({ page }, testInfo) => {
-    const email = uniqueTestEmail('regother');
-    await registrationPage.registerOther({
-      username: 'QATestOther',
-      phone: '888123456',
-      email,
-      password: 'TestPass123!',
-    });
-
-    await registrationPage.submit();
-    logCreatedAccount(email, testInfo.project.name);
-
-    await expect(page).toHaveURL(/\/registration\/success\/$/);
-    await expect(registrationPage.successHeading).toBeVisible();
-    await expect(registrationPage.successHeading).toContainText('Трябва да потвърдиш регистрацията си!');
-  });
 });

@@ -1,9 +1,10 @@
 # Autonomous operating procedure
 
-Followed when the user says to work through the backlog unattended for an extended
-stretch, instead of the normal turn-by-turn "what should we build next" flow. This is a
-single continuous session — not a scheduled/cron loop — so "one cycle" below just means
-"the next thing to do next," repeated for as long as the session runs.
+Followed when working through the backlog unattended, instead of the normal turn-by-turn
+"what should we build next" flow. Overnight runs use `automation/night/night-run.sh` (see
+`NIGHT_RUN.md`), which starts a fresh session for each cycle below and handles time, repeats
+and stopping. In a single interactive session, "one cycle" just means "the next thing to do,"
+repeated for as long as the session runs.
 
 ## Before starting
 
@@ -15,7 +16,7 @@ single continuous session — not a scheduled/cron loop — so "one cycle" below
   - If it shows changes that don't look like that (unrelated files, mid-edit state that
     doesn't match any backlog item) — assume it's the user's own in-progress work. Leave
     it alone. Note it in `ATTENTION.md` and stop rather than building on top of it blindly.
-- Confirm `tests/auth` is green right now (`npx playwright test tests/auth --project=ucha-dev --reporter=list`)
+- Confirm `tests/auth` is green right now (`npx playwright test tests/auth --project=ucha-dev --grep-invert @story --reporter=list`)
   before picking up new work — never add coverage on top of a suite that's already red for
   reasons other than the environment being down.
 
@@ -27,20 +28,20 @@ single continuous session — not a scheduled/cron loop — so "one cycle" below
    Either signal means "environment down": do not run tests, do not attempt healing, note
    it, wait a few minutes, check again. This check exists because a down environment looks
    *exactly* like every test failing at once, which is not what it means.
-2. **Run the full suite:** `npx playwright test tests/auth --project=ucha-dev --reporter=list`.
+2. **Run the quick auth checks:** `npx playwright test tests/auth --project=ucha-dev --grep-invert @story --reporter=list`.
 3. **If anything failed** → go to "Self-healing" below. Do not proceed to new coverage work
    until the suite is green again (or the failure has been explicitly escalated to
    `ATTENTION.md`/`test.fixme()` rather than silently left red).
-4. **If everything passed** → take the next unchecked item in `BACKLOG.md` and do one full
-   unit of work:
+4. **If everything passed** → take the next unchecked item (`- [ ]`) in `BACKLOG.md` — never
+   a `- [?]` proposal, those wait for the user's OK — and do one full unit of work:
    - Explore the live site for whatever this item needs (curl the real pages, grep for the
      actual DOM structure — the same process used to build everything so far; never guess
      at selectors or URLs).
-   - Build/extend the relevant page object (`pages/*.ts`), reusing `retryClick` for any
+   - Build/extend the relevant page object (`pages/*.ts`), using `clickWhenReady` for any
      click that triggers a network/JS-driven effect (this site's click handlers bind async
-     after page load — see `utils/retryClick.ts`'s doc comment).
+     after page load — see `utils/clickWhenReady.ts`'s doc comment).
    - Write the test, run it against `ucha-dev`, fix anything that doesn't work first try.
-   - Run the *full* suite again to confirm no regression.
+   - Run the quick auth checks again (`--grep-invert @story`) to confirm no regression.
    - `git commit` (one commit per completed backlog item; message describes what was added).
    - Check the item off in `BACKLOG.md`, commit that too (can combine with the above commit).
 5. **Periodically** (roughly every 10 full-suite runs): run `scripts/cleanup-accounts.ts`
@@ -72,7 +73,7 @@ A failure is not automatically "a broken selector." Classify it before touching 
    the same way every selector in this project was originally found (curl + grep, or a
    quick Playwright script to inspect the real markup). Never guess.
 3. **Timing** (the element eventually appears if you wait longer — this site's known
-   click-handler-binds-late quirk) → wrap the click in `retryClick`, don't change the
+   click-handler-binds-late quirk) → wrap the click in `clickWhenReady`, don't change the
    selector. Confirm the "eventually appears on a longer wait" precondition before treating
    it as a timing issue rather than reaching for this as a default response to any timeout.
 4. **Strict-mode violation** (locator resolves to 2+ elements) → never resolve with
@@ -96,7 +97,7 @@ For any fix in categories 2-4:
 
 If something invalidates an assumption mid-session — a backlog item no longer makes sense
 given the current site, the environment stays down far longer than a VPN blip would
-explain, Jira/Gmail access breaks, anything that isn't covered by the rules above — do not
+explain, Jira/email access breaks, anything that isn't covered by the rules above — do not
 creatively reinterpret the backlog or guess at a workaround. Write a plain note to
 `ATTENTION.md`, do the minimal safe no-op for that specific item, and continue with
 whatever else is still safe to do.

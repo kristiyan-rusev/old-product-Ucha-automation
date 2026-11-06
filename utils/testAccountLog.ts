@@ -3,8 +3,22 @@ import * as path from 'path';
 
 const LOG_PATH = path.join(__dirname, '..', 'test-data', 'created-accounts.log');
 
-/** Appends a record of a real account created by a test — so accumulation across runs is traceable. */
+/**
+ * test-data/created-accounts.log lists the test accounts that currently exist on dev: a line is
+ * added when a test registers an account and removed when the account is deactivated. Whatever
+ * is left in it is cleaned up by scripts/cleanup-accounts.ts.
+ */
 export function logCreatedAccount(email: string, project: string) {
-  const line = `${new Date().toISOString()}\t${project}\t${email}\n`;
-  fs.appendFileSync(LOG_PATH, line);
+  fs.appendFileSync(LOG_PATH, `${new Date().toISOString()}\t${project}\t${email}\n`);
+}
+
+/** Drops every line for `email` — called once the account has been deactivated. */
+export function unlogAccount(email: string) {
+  if (!fs.existsSync(LOG_PATH)) return;
+  const wanted = email.toLowerCase();
+  const kept = fs
+    .readFileSync(LOG_PATH, 'utf-8')
+    .split('\n')
+    .filter((line) => line && line.split('\t')[2]?.toLowerCase() !== wanted);
+  fs.writeFileSync(LOG_PATH, kept.join('\n') + (kept.length ? '\n' : ''));
 }

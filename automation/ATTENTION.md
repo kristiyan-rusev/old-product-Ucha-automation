@@ -11,7 +11,30 @@ Each entry: timestamp, what happened, what was done instead (skipped item / `tes
 
 ---
 
+**2026-10-28 — Test accounts with a monthly-payment plan can't be deactivated; they need an admin.**
+The site rule "Не можеш да деактивираш профила си, докато имаш активен абонамент с плащане на
+месец!" blocks deactivation from the profile while an installment plan is active. All other test
+accounts are now deactivated (≈360 today) and tests clean up after themselves, but these stay:
+- 13 old accounts (`kristest2233+sub12inst…` / `+sub24inst…`), listed in
+  `test-data/created-accounts.log` with the tag `ucha-dev-monthly-plan`;
+- every run of the two tests that buy a monthly plan (12- and 24-month installment, in
+  subscription-purchase.spec.ts and subscription-durations.spec.ts) adds one more each — they
+  use a new address per run (`registerAndLogin(..., { monthlyPlan: true })`) because the old one
+  can't be freed; the MultiSport story's installment variants do the same.
+`scripts/cleanup-accounts.ts` reports them as `blocked-monthly-plan` and keeps them in the log.
+
+What a human should decide: is there an admin way to end a test account's installment contract
+or deactivate it (then the cleanup could do it too), and should the two monthly-plan purchase
+tests run on every run or only occasionally (e.g. not in night runs)?
+
+---
+
 **2026-09-16 — `scripts/cleanup-accounts.ts` cannot deactivate "profiledata"-labeled accounts.**
+**Resolved 2026-10-28:** not a rate limit. Once an account's phone has been verified (editing
+personal data does that), the deactivation popup sends the code by itself and shows the code
+input straight away — there's no "Изпрати код" button, and `verifyWithCode` waited 30 s for
+it. It now handles both versions of the popup; a profiledata account deactivated fine.
+
 Across three separate cleanup runs over two days (2026-09-15 and 2026-09-16), the exact
 same set of throwaway accounts created by the personal-data profile-settings test
 (`profile-settings.spec.ts`'s "profiledata" label) have consistently failed the cleanup
