@@ -5,18 +5,14 @@ export class BasePage {
   readonly page: Page;
 
   // Header
-  readonly logo: Locator;
   readonly loginLink: Locator;
-  readonly registerLink: Locator;
   readonly userNavToggler: Locator;
   readonly logoutLink: Locator;
 
   constructor(page: Page) {
     this.page = page;
 
-    this.logo = page.locator('a.logo, .site-logo').first();
     this.loginLink = page.locator('a[href*="/login/"]').first();
-    this.registerLink = page.locator('a[href*="/registration/"]').first();
     // Avatar in the header — clicking it expands the #user-nav dropdown (Моите уроци, Моят профил, ..., Изход)
     this.userNavToggler = page.locator('.user-nav-toggler').first();
     this.logoutLink = page.locator('a[href*="/logout/"]').first();

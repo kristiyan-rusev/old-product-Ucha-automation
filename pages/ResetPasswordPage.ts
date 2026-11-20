@@ -4,7 +4,6 @@ import { clickWhenReady } from '../utils/clickWhenReady';
 
 export class ResetPasswordPage extends BasePage {
   // Request step (/reset-password/) — #password-forgotten
-  readonly requestForm: Locator;
   readonly emailInput: Locator;
   readonly requestSubmitButton: Locator;
   readonly requestSuccessMessage: Locator;
@@ -17,7 +16,6 @@ export class ResetPasswordPage extends BasePage {
   constructor(page: Page) {
     super(page);
 
-    this.requestForm = page.locator('#password-forgotten');
     this.emailInput = page.locator('#password-forgotten input[name="email"]');
     this.requestSubmitButton = page.locator('#password-forgotten #send_data');
     this.requestSuccessMessage = page.locator('#reset-password-success');

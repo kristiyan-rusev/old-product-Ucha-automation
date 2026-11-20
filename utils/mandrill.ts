@@ -33,6 +33,14 @@ export const Emails = {
   passwordReset: { subject: 'парола', link: /\/reset-password\/new\// },
   /** "Потвърди смяната на имейла си в Уча.се" — to the new address; path not pinned yet. */
   emailChange: { subject: 'смяната', link: null },
+  /** "Остават ти само 7 дни абонамент за Уча.се" — sent when a subscription ends in 7 days and auto-renewal is off. */
+  expiringSubscription7Days: { subject: 'Остават', link: /\/subscription\// },
+  /** "Абонаментът ти за Уча.се изтече!" — sent the day a subscription has expired and auto-renewal is off. */
+  expiredSubscription: { subject: 'изтече', link: /\/subscription\// },
+  /** "Успешно активирахте абонамент за Уча.се за 12 месеца" — sent after a successful card payment (the default card purchase has auto-renewal on). */
+  boughtSubscription: { subject: 'активирахте', link: null },
+  /** "Неуспешно подновяване на абонамент за Уча.се за 12 месеца" — sent when the automatic renewal can't charge the card (7-days-before variant); its button goes to /profile/subscription/#recurring-section. */
+  failedRenewal: { subject: 'Неуспешно', link: /\/profile\/subscription\// },
 } satisfies Record<string, EmailKind>;
 
 export type EmailKind = { subject: string; link?: RegExp | null };

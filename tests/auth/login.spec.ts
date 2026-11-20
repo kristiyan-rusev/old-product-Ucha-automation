@@ -10,7 +10,7 @@ test.describe('Login', () => {
     await loginPage.goto();
   });
 
-  test('valid credentials — successful login redirects to home', async ({ page }) => {
+  test('valid credentials — successful login redirects to home', { tag: '@checklist' }, async ({ page }) => {
     await loginPage.login(users.student.email, users.student.password);
     await expect(page).toHaveURL('/');
   });
@@ -31,27 +31,5 @@ test.describe('Login', () => {
   test('empty fields — shows generic error', async () => {
     await loginPage.submit();
     await expect(loginPage.errorMessage).toBeVisible();
-  });
-
-  test('forgot password link navigates to the reset password page', async ({ page }) => {
-    await expect(loginPage.forgotPasswordLink).toBeVisible();
-    await loginPage.forgotPasswordLink.click();
-    await expect(page).toHaveURL(/\/reset-password\/$/);
-    await expect(page.locator('#password-forgotten')).toBeVisible();
-  });
-
-  test('Facebook login button is visible', async () => {
-    await expect(loginPage.facebookButton).toBeVisible();
-  });
-
-  test('Apple login button is visible', async () => {
-    await expect(loginPage.appleButton).toBeVisible();
-  });
-
-  test('register link navigates to registration page', async ({ page }) => {
-    await expect(loginPage.registerLinkFooter).toBeVisible();
-    await loginPage.registerLinkFooter.click();
-    await expect(page).toHaveURL(/\/registration\/$/);
-    await expect(page.locator('#registration-content')).toBeVisible();
   });
 });

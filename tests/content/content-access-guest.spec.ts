@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { LessonContentPage } from '../../pages/LessonContentPage';
+import { LessonVideoPage } from '../../pages/LessonVideoPage';
 
 // Staging Checklist rows 22 + 26 — what a guest gets from lessons, tests and mind maps.
 // 6. клас Математика: lessons 1–5 of the grade are free (8000–8004), from the 6th (8005) on
@@ -11,42 +12,44 @@ const freeLesson = {
 };
 const lockedLesson = {
   video: '/watch/8005/nachalen-pregovor-geometrichni-figuri',
-  test: '/testove/6166/geometrichni-figuri-nachalen-pregovor',
-  mindMap: '/pregovor/2104/nachalen-pregovor-geometrichni-figuri',
 };
+// Lesson 6's test and mind map for a guest are not checked: the user found them not needed (review, 2026-11-20).
 
 test.describe('Content access — guest', () => {
-  test('a free lesson (1 of the grade) is marked as a free video', async ({ page }) => {
+  test('a free lesson (1 of the grade) is marked as a free video', { tag: '@checklist' }, async ({ page }) => {
     const lesson = new LessonContentPage(page);
-    await lesson.goto(freeLesson.video);
+    const video = new LessonVideoPage(page);
+    await video.open(freeLesson.video);
 
     await expect(lesson.freeVideoGuestMessage).toContainText(
       'Това е безплатен видео урок. Регистрирай се, за да разбереш как да използваш всички над 27 000 видео урока, теста и преговора с мисловни карти в най-награждавания образователен сайт!'
     );
     await expect(lesson.trailerGuestMessage).toHaveCount(0);
+
+    expect(await video.isTrailer()).toBe(false);
+    await video.play();
   });
 
-  test('a later lesson (6 of the grade) is only a trailer', async ({ page }) => {
+  test('a later lesson (6 of the grade) is only a trailer', { tag: '@checklist' }, async ({ page }) => {
     const lesson = new LessonContentPage(page);
-    await lesson.goto(lockedLesson.video);
+    const trailer = new LessonVideoPage(page, 'ucha-player-trailer');
+    await trailer.open(lockedLesson.video);
 
     await expect(lesson.trailerGuestMessage).toContainText(
       'Това е трейлър с избрани моменти от видео урока! Регистрирай се, за да гледаш всички над 27 000 видео урока в най-награждавания образователен сайт!'
     );
     await expect(lesson.freeVideoGuestMessage).toHaveCount(0);
+
+    expect(await trailer.isTrailer()).toBe(true);
+    await trailer.play();
   });
 
-  for (const [name, lesson] of [
-    ['lesson 1', freeLesson],
-    ['lesson 6', lockedLesson],
-  ] as const) {
-    test(`the test of ${name} can't be taken without registering`, async ({ page }) => {
-      const content = new LessonContentPage(page);
-      await content.goto(lesson.test);
+  test("the test of lesson 1 can't be taken without registering", { tag: '@checklist' }, async ({ page }) => {
+    const content = new LessonContentPage(page);
+    await content.goto(freeLesson.test);
 
-      await expect(content.testGuestPrompt).toHaveText('За да разбереш как да направиш теста, регистрирай се в Уча.се!');
-    });
-  }
+    await expect(content.testGuestPrompt).toHaveText('За да разбереш как да направиш теста, регистрирай се в Уча.се!');
+  });
 
   test('the mind map of lesson 1 is shown and downloads as an image', async ({ page }) => {
     const content = new LessonContentPage(page);
@@ -61,18 +64,5 @@ test.describe('Content access — guest', () => {
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('image/jpeg');
     expect(response.headers()['content-disposition']).toContain('attachment');
-  });
-
-  test('the mind map of lesson 6 asks to register and its download link gives no file', async ({ page }) => {
-    const content = new LessonContentPage(page);
-    await content.goto(lockedLesson.mindMap);
-
-    await expect(content.mindMapGuestPrompt).toContainText('За да видиш преговора, регистрирай се в Уча.се!');
-    await expect(content.mindMapDownloadTitle).toHaveCount(0);
-
-    // Opening the download URL directly must not hand out the image either.
-    const response = await page.request.get('/download-mindmap/2104/8005/0');
-    expect(response.headers()['content-type']).not.toContain('image/');
-    expect(response.headers()['content-disposition'] ?? '').not.toContain('attachment');
   });
 });

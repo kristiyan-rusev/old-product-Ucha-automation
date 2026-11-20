@@ -1,9 +1,10 @@
 import { Browser, Page } from '@playwright/test';
 import { LoginPage } from '../pages/LoginPage';
 import { ProfileSettingsPage } from '../pages/ProfileSettingsPage';
+import { SetDataPage } from '../pages/SetDataPage';
 import { Emails, extractLink, findEmail } from './mandrill';
 import { clickWhenReady } from './clickWhenReady';
-import { unlogAccount } from './testAccountLog';
+import { isLogged, unlogAccount } from './testAccountLog';
 
 /**
  * Logging in, deactivating and cleaning up test accounts. Tests reuse fixed addresses
@@ -22,6 +23,11 @@ export const TEST_PASSWORDS = ['TestPass123!', 'NewTestPass456!'];
 export async function logIn(page: Page, email: string, password: string): Promise<boolean> {
   const loginPage = new LoginPage(page);
   await page.goto('/login/');
+  if (!new URL(page.url()).pathname.startsWith('/login')) {
+    // Already logged in (as someone) — /login/ redirects away. Log out first.
+    await page.goto('/logout/');
+    await page.goto('/login/');
+  }
   await loginPage.emailInput.fill(email);
   await loginPage.passwordInput.fill(password);
   await clickWhenReady(loginPage.submitButton, () =>
@@ -95,8 +101,16 @@ export async function deactivateIfExists(page: Page, email: string, passwords = 
   try {
     await deactivateLoggedIn(page, password);
   } catch (e) {
-    if (e instanceof DeactivationBlockedError) return 'blocked-monthly-plan'; // stays in the log
-    throw e;
+    if (!(e instanceof DeactivationBlockedError)) throw e;
+    // The account pays monthly, which blocks deactivation: reset its subscription data on
+    // /set-data.php (affects only this logged-in account), then deactivate.
+    await new SetDataPage(page).resetPaymentData();
+    try {
+      await deactivateLoggedIn(page, password);
+    } catch (again) {
+      if (again instanceof DeactivationBlockedError) return 'blocked-monthly-plan'; // stays in the log
+      throw again;
+    }
   }
   unlogAccount(email);
   return activated ? 'activated+deactivated' : 'deactivated';
@@ -121,6 +135,15 @@ export async function removeAccounts(browser: Browser, baseURL: string, emails: 
       })
       .catch((e: Error) => console.warn(`[accounts] couldn't remove ${email} (stays in created-accounts.log): ${e.message.split('\n')[0]}`));
   }
+}
+
+/**
+ * Before a test: removes a leftover account only where created-accounts.log says one exists (an
+ * interrupted run). Usually there is none, so no login is tried at all — removeAccounts would
+ * try every known password and search Mandrill for each address first.
+ */
+export async function removeLeftovers(browser: Browser, baseURL: string, emails: string[]) {
+  await removeAccounts(browser, baseURL, emails.filter(isLogged));
 }
 
 async function firstWorkingPassword(page: Page, email: string, passwords: string[]): Promise<string | null> {

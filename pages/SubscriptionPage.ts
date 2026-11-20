@@ -1,8 +1,7 @@
 import { Page, Locator } from '@playwright/test';
 import { BasePage } from './BasePage';
 import { clickWhenReady } from '../utils/clickWhenReady';
-
-type FibankCard = { name: string; number: string; expiryMonth: string; expiryYear: string; cvc: string };
+import { FibankCard, noteFibankDecline } from '../utils/fibankCards';
 
 export type Duration = '6' | '12' | '24';
 export type PaymentMethod = 'card' | 'cash' | 'epay';
@@ -39,12 +38,27 @@ export class SubscriptionPage extends BasePage {
 
   // Selected-plan summary panel (right-hand side), useful for price/duration assertions.
   readonly selectedTime: Locator;
-  readonly selectedPrice: Locator;
-  readonly infoPrice: Locator;
   readonly payFor: Locator;
   readonly payMonthly: Locator;
   readonly selectedPayment: Locator;
-  readonly selectedPaymentLabel: Locator;
+
+  // "+ 1 подарък" on a duration card: offered while a subscription is active or expiring, gone once it expired
+  // (checked live 2026-11-02; the cards then also change data-id, e.g. 12 months 15 → 4).
+  readonly giftOffers: Locator;
+
+  // /subscription/ while a subscription is running: "Удължавате сегашния си абонамент, без да губите дни, до
+  // <date>" (from the source template select_option_subscription_extension_text) — the date follows the selected package.
+  readonly extensionNote: Locator;
+  readonly extensionEndDate: Locator;
+
+  // With a streak discount on the account: the banner "Използваш отстъпка от N% от редовната цена…", the
+  // struck-through full price of the selected package (#info-price) and next to it the reduced one.
+  readonly discountNotice: Locator;
+  readonly fullPrice: Locator;
+  readonly discountedPrice: Locator;
+
+  // /profile/subscription/ — the status next to "Твоят абонамент е" (Активен / Изтичащ / Спрян).
+  readonly subscriptionStatus: Locator;
 
   // /payment-contract — installment ("Плащане на месец") only, never shown for prepaid:
   // parent/guardian details required before FIBank, confirmed live by SMS to the given
@@ -68,6 +82,13 @@ export class SubscriptionPage extends BasePage {
   readonly payButton: Locator;
   // Same form when turning auto-renewal back on, but the submit says "Включете".
   readonly enableRecurringButton: Locator;
+  // "Актуализирай картата си" of a monthly plan (verified live 2026-11-03): the same form on FIBank's "Настройки на данните на
+  // банкова карта" page, submit "Запазете", ends on /payment/final/success ("Успешна промяна!") with a small table.
+  readonly saveCardButton: Locator;
+  readonly cardUpdateResult: Locator;
+  readonly cardUpdateNextPayment: Locator;
+  readonly cardUpdateType: Locator;
+  readonly cardUpdateLast4: Locator;
 
   // EasyPay ("В брой") confirmation page (`/pay_final.php` on our own origin) — a *pending*
   // order until actually paid. `completeEasyPayViaDemoTerminal()` pays it for real via
@@ -96,6 +117,13 @@ export class SubscriptionPage extends BasePage {
     super(page);
 
     this.subscribeButton = page.locator('#subscribe-button');
+    this.giftOffers = page.locator('#subscription-page .month-gift-text');
+    this.extensionNote = page.locator('#info-current-next');
+    this.extensionEndDate = page.locator('#subscription-will-be-active-until');
+    this.discountNotice = page.getByText(/Използваш отстъпка от \d+%/);
+    this.fullPrice = page.locator('#info-price .base-price');
+    this.discountedPrice = page.locator('#info-price-with-discount .base-price');
+    this.subscriptionStatus = page.locator('p').filter({ hasText: 'Твоят абонамент е' }).locator('.subs-state');
     this.durationCards = {
       '6': page.locator(`[data-id="${DURATION_IDS['6']}"][data-object_type="package"]`),
       '12': page.locator(`[data-id="${DURATION_IDS['12']}"][data-object_type="package"]`),
@@ -112,12 +140,9 @@ export class SubscriptionPage extends BasePage {
     };
 
     this.selectedTime = page.locator('#selected-time');
-    this.selectedPrice = page.locator('#selected-price');
-    this.infoPrice = page.locator('#info-price');
     this.payFor = page.locator('#pay-for');
     this.payMonthly = page.locator('#pay-monthly');
     this.selectedPayment = page.locator('#selected-payment');
-    this.selectedPaymentLabel = page.locator('#selected-payment-label');
 
     this.contractFullNameInput = page.locator('#fullname');
     this.contractPhoneInput = page.locator('#phone-number');
@@ -136,6 +161,11 @@ export class SubscriptionPage extends BasePage {
     this.cvcInput = page.locator('#cvc2');
     this.payButton = page.getByText('Плащане', { exact: true });
     this.enableRecurringButton = page.getByText('Включете', { exact: true });
+    this.saveCardButton = page.getByText('Запазете', { exact: true });
+    this.cardUpdateResult = page.locator('#wrap'); // the page's content wrapper — only for toContainText
+    this.cardUpdateNextPayment = page.locator('#recurring-table .recurring-next .recurring-td');
+    this.cardUpdateType = page.locator('#recurring-table .recurring-type .recurring-td');
+    this.cardUpdateLast4 = page.locator('#recurring-table .recurring-mask .recurring-td');
 
     // Confirmed live: `/pay_final.php` has a real duplicate-id bug — a second, unrelated
     // "possible payment methods" block further down the page reuses the same
@@ -246,6 +276,22 @@ export class SubscriptionPage extends BasePage {
   }
 
   /**
+   * Buying again while a subscription runs, with the card saved from the first purchase (verified live
+   * 2026-11-02): "Купи" goes to `/payment/payment-card` instead of FIBank's form — it names the card
+   * ("завършващ на …") and says the new subscription starts when the current one ends — and
+   * "Завършете плащането" pays with it, ending on /payment/final/success.
+   */
+  async proceedToSavedCardCheckout() {
+    await clickWhenReady(this.subscribeButton, () => this.page.waitForURL(/\/payment\/payment-card/, { timeout: 15000 }));
+  }
+
+  async paySavedCard() {
+    await clickWhenReady(this.page.getByRole('button', { name: 'Завършете плащането' }), () =>
+      this.page.waitForURL(/\/payment\/final\/success/, { timeout: 15000 })
+    );
+  }
+
+  /**
    * Installment only: fills the parent/guardian details `/payment-contract` requires, then
    * confirms the SMS code sent to that phone (a real legal-contract safeguard, not specific
    * to any one feature) — the dev-environment bypass code (111111) applies here too.
@@ -273,6 +319,8 @@ export class SubscriptionPage extends BasePage {
     await this.fillCardForm(card);
     await this.payButton.click();
     await this.page.waitForURL(/\/payment\/final\/success/, { timeout: 15000 });
+    // FIBank sends a declined payment here too; unless set-data simulated it, the sandbox card is used up.
+    if ((await this.page.locator('#wrap').innerText()).includes('Неуспешно завършена поръчка')) noteFibankDecline(card);
   }
 
   /**
@@ -284,6 +332,13 @@ export class SubscriptionPage extends BasePage {
     await this.fillCardForm(card);
     await this.enableRecurringButton.click();
     await this.page.waitForURL(/\/payment\/final\/success/, { timeout: 15000 });
+  }
+
+  /** FIBank's card-settings page (after "Актуализирай картата си"): fills the new card and saves — resolves on /payment/final/success. */
+  async saveNewCard(card: FibankCard) {
+    await this.fillCardForm(card);
+    await this.saveCardButton.click();
+    await this.page.waitForURL(/\/payment\/final\/success/, { timeout: 20000 });
   }
 
   private async fillCardForm(card: FibankCard) {
@@ -330,20 +385,22 @@ export class SubscriptionPage extends BasePage {
   }
 
   /**
-   * Polls `/profile/subscription/` until the "no active subscription" CTA is gone (or the
-   * timeout elapses, in which case it throws). Confirmed live that both the EasyPay-terminal
-   * and ePay completions activate the subscription within a few seconds of the gateway
-   * confirming payment, but not instantly — a single check right after redirecting back can
-   * observe stale (still-inactive) state.
+   * Polls `/profile/subscription/` until the visible status next to "Твоят абонамент е" says
+   * "Активен" (or the timeout elapses, in which case it throws). Confirmed live that both the
+   * EasyPay-terminal and ePay completions activate the subscription within a few seconds of
+   * the gateway confirming payment, but not instantly — a single check right after
+   * redirecting back can observe stale (still-inactive) state. The "Активирай абонамент сега"
+   * text can sit hidden in the page of an active subscription, so it is not used here.
+   * The profile templates (prepaid and monthly plan alike) print "Активен" for a running
+   * subscription; "Изтичащ" / "Спрян" are other states and don't count as active.
    */
   async waitForActiveSubscription({ timeoutMs = 20000, pollIntervalMs = 2000 }: { timeoutMs?: number; pollIntervalMs?: number } = {}) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       await this.page.goto('/profile/subscription/');
-      const stillPending = await this.page.locator('body').filter({ hasText: 'Активирай абонамент сега' }).count();
-      if (stillPending === 0) return;
+      if (await this.subscriptionStatus.filter({ hasText: /^\s*Активен\s*$/ }).isVisible()) return;
       await this.page.waitForTimeout(pollIntervalMs);
     }
-    throw new Error(`Subscription did not activate within ${timeoutMs}ms`);
+    throw new Error(`Subscription did not show the status "Активен" within ${timeoutMs}ms`);
   }
 }

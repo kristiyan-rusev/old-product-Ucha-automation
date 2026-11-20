@@ -6,7 +6,7 @@ import { ProfileSettingsPage } from '../../pages/ProfileSettingsPage';
 import { testAddress } from '../../test-data/credentials';
 import { logCreatedAccount } from '../../utils/testAccountLog';
 import { expectEmail, Emails } from '../../utils/mandrill';
-import { deactivateLoggedIn, logIn, removeAccounts, TEST_PASSWORDS } from '../../utils/accounts';
+import { deactivateLoggedIn, logIn, removeAccounts, removeLeftovers, TEST_PASSWORDS } from '../../utils/accounts';
 import { unlogAccount } from '../../utils/testAccountLog';
 
 // The whole life of one student account, as a story: one account per run instead of one per
@@ -22,14 +22,15 @@ const RESET_PASSWORD = TEST_PASSWORDS[1]; // after the emailed password reset
 test.describe('Student account — from registration to deactivation', () => {
   test.beforeEach(async ({ browser, baseURL }) => {
     // Leftovers from an interrupted run would block registering the same address.
-    await removeAccounts(browser, baseURL!, [email, changedEmail]);
+    await removeLeftovers(browser, baseURL!, [email, changedEmail]);
   });
 
-  test.afterEach(async ({ browser, baseURL }) => {
-    await removeAccounts(browser, baseURL!, [email, changedEmail]);
+  test.afterEach(async ({ browser, baseURL }, testInfo) => {
+    // A passing story deactivated its account itself; after a failure, remove it the thorough way.
+    if (testInfo.status !== 'passed') await removeAccounts(browser, baseURL!, [email, changedEmail]);
   });
 
-  test('register, activate, log in/out, reset password, edit profile, change email, deactivate', { tag: '@story' }, async ({ page }, testInfo) => {
+  test('register, activate, log in/out, reset password, edit profile, change email, deactivate', { tag: ['@story', '@checklist'] }, async ({ page }, testInfo) => {
     test.setTimeout(10 * 60_000);
     const registration = new RegistrationPage(page);
     const loginPage = new LoginPage(page);

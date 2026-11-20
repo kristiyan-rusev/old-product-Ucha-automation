@@ -34,20 +34,14 @@ export class ProfileSettingsPage extends BasePage {
   // код" button), so confirming it only needs confirmSentCode(), not verifyWithCode().
   readonly personalDataEditButton: Locator;
   readonly personalDataSaveButton: Locator;
-  readonly personalDataCancelButton: Locator;
   readonly nameInput: Locator;
   readonly genderMaleLabel: Locator;
-  readonly genderFemaleLabel: Locator;
-  readonly personalDataPhoneInput: Locator;
   readonly personalDataPreview: Locator;
 
   // "Училище и клас" (school & grade) section (#additional_data). Unlike personal_data,
   // saving here is a plain AJAX POST with no phone re-verification.
   readonly schoolClassEditButton: Locator;
   readonly schoolClassSaveButton: Locator;
-  readonly schoolClassCancelButton: Locator;
-  readonly schoolClassCitySelect: Locator;
-  readonly schoolClassSchoolSelect: Locator;
   readonly schoolClassGradeSelect: Locator;
   readonly schoolClassPreview: Locator;
 
@@ -85,8 +79,10 @@ export class ProfileSettingsPage extends BasePage {
   readonly newsletterSaveButton: Locator;
   readonly commentReplyToggleCheckbox: Locator;
   readonly commentReplyToggleLabel: Locator;
-  readonly marketingEmailsToggleLabel: Locator;
   readonly newsletterPreview: Locator;
+  // "Искам да получавам информация за специални оферти и новини" — off for a new account (verified live 2026-11-02).
+  readonly marketingToggleCheckbox: Locator;
+  readonly marketingToggleLabel: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -111,18 +107,12 @@ export class ProfileSettingsPage extends BasePage {
 
     this.personalDataEditButton = page.locator('#personal_data button.profile-section-edit[data-profile_mode="form"]');
     this.personalDataSaveButton = page.locator('#personal_data button.profile-section-save');
-    this.personalDataCancelButton = page.locator('#personal_data button[data-profile_mode="preview"]');
     this.nameInput = page.locator('#personal_data input[name="username"]');
     this.genderMaleLabel = page.locator('label[for="profile-male"]');
-    this.genderFemaleLabel = page.locator('label[for="profile-female"]');
-    this.personalDataPhoneInput = page.locator('#personal_data #phone-number-value');
     this.personalDataPreview = page.locator('#personal_data');
 
     this.schoolClassEditButton = page.locator('#additional_data button.profile-section-edit[data-profile_mode="form"]');
     this.schoolClassSaveButton = page.locator('#additional_data button.profile-section-save');
-    this.schoolClassCancelButton = page.locator('#additional_data button[data-profile_mode="preview"]');
-    this.schoolClassCitySelect = page.locator('#additional_data #city');
-    this.schoolClassSchoolSelect = page.locator('#additional_data #school-filter');
     this.schoolClassGradeSelect = page.locator('#additional_data select[name="grade"]');
     this.schoolClassPreview = page.locator('#additional_data');
 
@@ -147,8 +137,9 @@ export class ProfileSettingsPage extends BasePage {
     this.newsletterSaveButton = page.locator('#newsletter button.profile-section-save');
     this.commentReplyToggleCheckbox = page.locator('#custom-check-all');
     this.commentReplyToggleLabel = page.locator('label.switch', { has: this.commentReplyToggleCheckbox });
-    this.marketingEmailsToggleLabel = page.locator('label[for="custom-check-marketing-emails"]');
     this.newsletterPreview = page.locator('#newsletter');
+    this.marketingToggleCheckbox = page.locator('#custom-check-marketing-emails');
+    this.marketingToggleLabel = page.locator('label.switch', { has: this.marketingToggleCheckbox });
   }
 
   async goto() {
@@ -304,6 +295,20 @@ export class ProfileSettingsPage extends BasePage {
     await clickWhenReady(this.newsletterEditButton, () =>
       this.commentReplyToggleLabel.waitFor({ state: 'visible', timeout: 5000 })
     );
+  }
+
+  /** Turns "информация за специални оферти и новини" on and saves (the section must be in preview mode). */
+  async enableMarketingEmails() {
+    await this.openNewsletterEdit();
+    await this.marketingToggleLabel.click();
+    await this.saveNewsletter();
+  }
+
+  /** Turns "информация за специални оферти и новини" off and saves (the section must be in preview mode). */
+  async disableMarketingEmails() {
+    await this.openNewsletterEdit();
+    if (await this.marketingToggleCheckbox.isChecked()) await this.marketingToggleLabel.click();
+    await this.saveNewsletter();
   }
 
   /** Saves whatever toggle state is currently set — a plain AJAX POST, no re-verification. */

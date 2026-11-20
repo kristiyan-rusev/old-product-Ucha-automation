@@ -7,11 +7,8 @@ export class LoginPage extends BasePage {
   readonly emailInput: Locator;
   readonly passwordInput: Locator;
   readonly submitButton: Locator;
-  readonly forgotPasswordLink: Locator;
   readonly errorMessage: Locator;
   readonly facebookButton: Locator;
-  readonly appleButton: Locator;
-  readonly registerLinkFooter: Locator;
 
   constructor(page: Page) {
     super(page);
@@ -21,12 +18,9 @@ export class LoginPage extends BasePage {
     this.passwordInput = page.locator('#login-form input[name="password"]');
     // Login is submitted via a click handler, not a real form submit — this is `type="button"`, not `type="submit"`.
     this.submitButton = page.locator('#send_data');
-    this.forgotPasswordLink = page.locator('#link-to-reset-password');
     // Injected server-side into the form on a failed attempt: <span class="error-message-line ...">
     this.errorMessage = page.locator('.error-message-line');
     this.facebookButton = page.locator('#fb-auth');
-    this.appleButton = page.locator('#apple-auth');
-    this.registerLinkFooter = page.locator('#link-to-register');
   }
 
   async goto() {

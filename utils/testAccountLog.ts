@@ -12,6 +12,13 @@ export function logCreatedAccount(email: string, project: string) {
   fs.appendFileSync(LOG_PATH, `${new Date().toISOString()}\t${project}\t${email}\n`);
 }
 
+/** Whether the log says an account on `email` exists on dev. */
+export function isLogged(email: string): boolean {
+  if (!fs.existsSync(LOG_PATH)) return false;
+  const wanted = email.toLowerCase();
+  return fs.readFileSync(LOG_PATH, 'utf-8').split('\n').some((line) => line.split('\t')[2]?.toLowerCase() === wanted);
+}
+
 /** Drops every line for `email` — called once the account has been deactivated. */
 export function unlogAccount(email: string) {
   if (!fs.existsSync(LOG_PATH)) return;

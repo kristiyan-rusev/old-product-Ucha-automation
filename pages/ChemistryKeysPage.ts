@@ -23,9 +23,25 @@ export class ChemistryKeysPage extends BasePage {
   readonly buyButton: Locator;
   readonly remainingKeys: Locator;
   readonly content: Locator;
+  readonly lockedScreen: Locator;
+  readonly unlockButton: Locator;
+  readonly unlockConfirmModal: Locator;
+  readonly confirmUnlockButton: Locator;
+  readonly unlockSuccessModal: Locator;
+  readonly unlockedVideos: Locator;
 
   constructor(page: Page) {
     super(page);
+
+    // A locked chemistry lesson (/watch/{id}/…) shows this screen instead of the player: the key price, the
+    // keys the user has, "Отключи това видео" → a confirmation modal → "Потвърждавам" → a success modal
+    // (POST /video/{id}/unlock); closing the success modal reloads the lesson.
+    this.lockedScreen = page.locator('#chemistry-locked-video-screen');
+    this.unlockButton = page.locator('#unlock-video-btn');
+    this.unlockConfirmModal = page.locator('#modal-unlock-video');
+    this.confirmUnlockButton = page.locator('#confirm-unlock-video-btn');
+    this.unlockSuccessModal = page.locator('#modal-unlock-video-success');
+    this.unlockedVideos = page.locator('#user-unlocked-videos');
 
     this.orderSummary = page.locator('#wrap');
     this.buyButton = page.locator('#subscribe-button');
@@ -39,6 +55,17 @@ export class ChemistryKeysPage extends BasePage {
 
   async gotoMyKeys() {
     await this.page.goto('/my-keys/');
+  }
+
+  /** "Отключи това видео" → confirm → the success modal. Closing that modal is left to the caller. */
+  async unlockVideo() {
+    await clickWhenReady(this.unlockButton, () => this.unlockConfirmModal.waitFor({ state: 'visible', timeout: 5000 }));
+    await clickWhenReady(this.confirmUnlockButton, () => this.unlockSuccessModal.waitFor({ state: 'visible', timeout: 10000 }));
+  }
+
+  /** Closes the success modal — the lesson then reloads by itself and shows the player. */
+  async closeUnlockSuccess() {
+    await this.unlockSuccessModal.getByRole('button', { name: 'Close' }).click();
   }
 
   packageCard(pkg: KeysPackage): Locator {

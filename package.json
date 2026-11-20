@@ -5,10 +5,10 @@
   "scripts": {
     "test": "npx playwright test",
     "test:dev": "npx playwright test --project=ucha-dev",
-    "test:staging": "npx playwright test --project=ucha-staging",
+    "test:checklist": "playwright test --project=ucha-dev --grep @checklist",
     "test:headed": "npx playwright test --headed",
     "test:debug": "npx playwright test --debug",
-    "test:ui": "npx playwright test --ui",
+    "test:ui": "playwright test --project=ucha-dev --ui --output=/tmp/pw-ui-results",
     "report": "npx playwright show-report"
   },
   "devDependencies": {

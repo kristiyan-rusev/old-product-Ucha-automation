@@ -13,8 +13,6 @@ import { clickWhenReady } from '../utils/clickWhenReady';
  */
 export class GiftPage extends BasePage {
   readonly payByCardButton: Locator;
-  readonly payByCashButton: Locator;
-  readonly payByEpayButton: Locator;
   readonly successMessage: Locator;
   readonly giftLink: Locator;
 
@@ -22,8 +20,6 @@ export class GiftPage extends BasePage {
     super(page);
 
     this.payByCardButton = page.locator('[data-qa="select_payment_3"]');
-    this.payByCashButton = page.locator('[data-qa="select_payment_2"]');
-    this.payByEpayButton = page.locator('[data-qa="select_payment_4"]');
     this.successMessage = page.locator('#wrap');
     this.giftLink = page.locator('#wrap a[href*="/profile/gifts/"]');
   }
@@ -38,12 +34,20 @@ export class GiftPage extends BasePage {
     await this.page.waitForLoadState('networkidle').catch(() => {});
   }
 
-  /** Reads the newest gift code from the buyer's /profile/subscription/ page. */
-  async readPurchasedGiftCode(): Promise<string> {
+  /** All gift codes listed on the buyer's /profile/subscription/ (the list has no reliable order). */
+  async giftCodes(): Promise<string[]> {
     await this.page.goto('/profile/subscription/');
     const text = await this.page.locator('#wrap').innerText();
-    const codes = [...text.matchAll(/КОД ЗА ПОДАРЪК:\s*(\d+)/g)].map((m) => m[1]);
-    if (!codes.length) throw new Error('No "КОД ЗА ПОДАРЪК" on /profile/subscription/');
-    return codes[codes.length - 1];
+    return [...text.matchAll(/КОД ЗА ПОДАРЪК:\s*(\d+)/g)].map((m) => m[1]);
+  }
+
+  /**
+   * The code the purchase just made: the one that wasn't in the list before it (`codesBefore`, from giftCodes()).
+   * A permanent account keeps the codes of earlier runs, and a killed run leaves its code behind.
+   */
+  async readPurchasedGiftCode(codesBefore: string[]): Promise<string> {
+    const fresh = (await this.giftCodes()).filter((code) => !codesBefore.includes(code));
+    if (fresh.length !== 1) throw new Error(`Expected exactly one new "КОД ЗА ПОДАРЪК" after the purchase, found ${fresh.length}`);
+    return fresh[0];
   }
 }

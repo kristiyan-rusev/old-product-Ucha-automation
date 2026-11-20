@@ -6,7 +6,6 @@ export type UserKind = 'student' | 'parent' | 'teacher' | 'bulgarian' | 'other';
 
 export class RegistrationPage extends BasePage {
   // Step 1 — "Аз съм:" user kind selection
-  readonly registrationContent: Locator;
   readonly studentOption: Locator;
   readonly parentOption: Locator;
   readonly teacherOption: Locator;
@@ -25,9 +24,9 @@ export class RegistrationPage extends BasePage {
   readonly emailInput: Locator;
   readonly passwordInput: Locator;
   readonly password2Input: Locator;
-  readonly marketingEmailsCheckbox: Locator;
-  readonly termsCheckbox: Locator;
   readonly gradeSelect: Locator;
+  // In order: the placeholder ("Избери клас" / "Избери група") first, then the grades or groups.
+  readonly gradeOptions: Locator;
   readonly citySelect: Locator;
   readonly schoolSelect: Locator;
   // Same two radio inputs (#profile-student/#profile-pre-school) are reused across kinds
@@ -40,7 +39,6 @@ export class RegistrationPage extends BasePage {
   readonly profileStudentLabel: Locator;
   readonly profilePreSchoolLabel: Locator;
   readonly nextButton: Locator;
-  readonly backButton: Locator;
   readonly submitButton: Locator;
   readonly errorMessage: Locator;
 
@@ -55,7 +53,6 @@ export class RegistrationPage extends BasePage {
   constructor(page: Page) {
     super(page);
 
-    this.registrationContent = page.locator('#registration-content');
     this.studentOption = page.locator('.user-kind-box[data-kind="student"]');
     this.parentOption = page.locator('.user-kind-box[data-kind="parent"]');
     this.teacherOption = page.locator('.user-kind-box[data-kind="teacher"]');
@@ -73,11 +70,10 @@ export class RegistrationPage extends BasePage {
     this.emailInput = page.locator('#field-email input[name="email"]');
     this.passwordInput = page.locator('#field-password input[name="password"]');
     this.password2Input = page.locator('#field-password2 input[name="password2"]');
-    this.marketingEmailsCheckbox = page.locator('#customCheck2');
-    this.termsCheckbox = page.locator('#customCheck1');
     // Real <select> elements underneath the bootstrap-select dropdown UI — selectOption() works
     // directly on them without needing to drive the fancy dropdown widget.
     this.gradeSelect = page.locator('#grade-filter');
+    this.gradeOptions = this.gradeSelect.locator('option');
     this.citySelect = page.locator('#city');
     // Disabled until a city is chosen — city selection triggers a real request
     // (GET /membership/registration_schools?town=...) that populates this list.
@@ -87,7 +83,6 @@ export class RegistrationPage extends BasePage {
     this.profileStudentLabel = page.locator('label[for="profile-student"]');
     this.profilePreSchoolLabel = page.locator('label[for="profile-pre-school"]');
     this.nextButton = page.locator('#register #next');
-    this.backButton = page.locator('#register #back');
     this.submitButton = page.locator('#register #send_data');
     this.errorMessage = page.locator('#register .error-message-line');
 
@@ -108,6 +103,11 @@ export class RegistrationPage extends BasePage {
       other: this.otherOption,
     };
     return byKind[kind];
+  }
+
+  /** An option of the city <select> by its text — Bulgarian towns, or "Country, City" for Bulgarians abroad. */
+  cityOption(text: string): Locator {
+    return this.citySelect.locator('option', { hasText: text });
   }
 
   /**
@@ -165,6 +165,20 @@ export class RegistrationPage extends BasePage {
     await this.emailInput.fill(email);
     await this.passwordInput.fill(password);
     await this.password2Input.fill(password);
+  }
+
+  /**
+   * Any kind's registration up to its last sub-step: kind, email signup, account details and
+   * credentials. For "other" the credentials sub-step is the last one, so its fields are filled
+   * and the form stops there; every other kind advances to the grade/city/school sub-step. That
+   * last sub-step differs per kind, so checking and filling it is left to the caller.
+   */
+  async fillUpToFinalStep(kind: UserKind, details: { username: string; phone: string; email: string; password: string }) {
+    await this.selectUserKind(kind);
+    await this.chooseEmailRegistration();
+    await this.fillAccountDetails(details.username, details.phone);
+    if (kind === 'other') await this.fillFinalCredentials(details.email, details.password);
+    else await this.fillCredentials(details.email, details.password);
   }
 
   /**
@@ -256,31 +270,5 @@ export class RegistrationPage extends BasePage {
     await this.fillAccountDetails(details.username, details.phone);
     await this.fillCredentials(details.email, details.password);
     await this.selectCityAndSchool(details.city);
-  }
-
-  /**
-   * Drives the full "bulgarian abroad" registration flow end to end, up to (not including)
-   * submit. Same shape as teacher (city + school, no grade selector, no profile-type
-   * radio) — only difference is citySelect lists "Country, City" pairs abroad instead of
-   * Bulgarian towns, and it accepts the same value/label string either way.
-   */
-  async registerBulgarianAbroad(details: { username: string; phone: string; email: string; password: string; city: string }) {
-    await this.selectUserKind('bulgarian');
-    await this.chooseEmailRegistration();
-    await this.fillAccountDetails(details.username, details.phone);
-    await this.fillCredentials(details.email, details.password);
-    await this.selectCityAndSchool(details.city);
-  }
-
-  /**
-   * Drives the full "other" registration flow end to end, up to (not including) submit.
-   * Only two sub-steps total (account details, then credentials) — see
-   * fillFinalCredentials's doc comment for why there's no third sub-step here.
-   */
-  async registerOther(details: { username: string; phone: string; email: string; password: string }) {
-    await this.selectUserKind('other');
-    await this.chooseEmailRegistration();
-    await this.fillAccountDetails(details.username, details.phone);
-    await this.fillFinalCredentials(details.email, details.password);
   }
 }

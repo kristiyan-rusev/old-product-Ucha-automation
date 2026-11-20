@@ -4,14 +4,31 @@ playwright-report/
 playwright/.auth/
 .env
 .claude/settings.local.json
-# Real MultiSport codes have actual redeemable value (unlike other test-data in this repo) —
-# kept local-only rather than committed.
-stories/UCHA-20682-multisport/test-data/multisport-codes.txt
-stories/UCHA-20682-multisport/test-data/used-codes.json
 .claude/scheduled_tasks.lock
 
-# Night runs (automation/NIGHT_RUN.md): logs and morning reports stay local
+# Night runs (autoTest skill, "Night runs"): logs and morning reports stay local
 automation/night-logs/
 automation/night-reports/
 automation/night/STOP
 .playwright-mcp/
+# Throwaway probe specs (automation/AGENT_RULES.md)
+tests/zz-*.spec.ts
+
+# Checks for single Jira tasks and stories, one folder per ticket (playwright.tasks.config.ts, `npm run task`) — local only
+task-tests/
+
+# Real АДГ codes (single-use) and which were used — local only
+test-data/adg-codes.txt
+test-data/adg-used-codes.json
+
+# Test accounts that currently exist on dev (utils/testAccountLog.ts) — this machine's state, cleaned by
+# scripts/cleanup-accounts.ts
+test-data/created-accounts.log
+
+# Which FIBank sandbox card is next and which were declined lately (utils/fibankCards.ts) — this machine's state
+test-data/fibank-card-usage.json
+
+# The user's test review list, their reviews and the last test durations (scripts/test-review.ts) — this machine's state
+automation/TEST_REVIEW.md
+automation/review-state.json
+automation/test-durations.json
